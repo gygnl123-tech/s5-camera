@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-<title>S5 Camera All-in-One (with Slow/Fast)</title>
+<title>S5 Camera All-in-One (MotionPano + Beauty)</title>
 <style>
   :root{
     --bg:#000;
@@ -163,6 +163,7 @@
       <button class="mode" data-mode="slowmo">슬로우모션</button>
       <button class="mode" data-mode="fastmo">패스트모션</button>
       <button class="mode" data-mode="pano">파노라마</button>
+      <button class="mode" data-mode="motionpano">모션파노라마</button>
       <button class="mode" data-mode="pro">프로</button>
 
       <!-- S5 감성 -->
@@ -171,6 +172,7 @@
       <button class="mode" data-mode="outfocus">아웃포커스</button>
       <button class="mode" data-mode="wide">와이드셀프샷</button>
       <button class="mode" data-mode="sports">스포츠</button>
+      <button class="mode" data-mode="beauty">뷰티페이스</button>
       <button class="mode" data-mode="rearselfie">리어캠 셀피</button>
     </div>
 
@@ -249,7 +251,7 @@ function downloadCanvas(filename){
 function label(text){
   ctx.save();
   ctx.fillStyle="rgba(0,0,0,.45)";
-  ctx.fillRect(18,18, 720, 34);
+  ctx.fillRect(18,18, 820, 34);
   ctx.fillStyle="#fff";
   ctx.font="18px system-ui";
   ctx.fillText(text, 28, 42);
@@ -415,7 +417,7 @@ function stitchBlend(images){
 /* ===== global state ===== */
 let mode = "photo";
 let baseUrl = null;
-let baseImg = null;
+let baseImg = null; // (기본 캡처 이미지)
 
 /* video record (normal) */
 let recorder = null;
@@ -434,11 +436,15 @@ let panoUrls=[], panoImgs=[], panoMax=10, panoSel=0;
 let wideUrls=[], wideImgs=[], wideMax=6, wideSel=0;
 let smUrls=[], smImgs=[], smSel=0;
 
+/* Motion Panorama frames */
+let mpUrls=[], mpImgs=[], mpMax=12, mpSel=0;
+
 /* sliders state */
 let pro = { exposure:0, contrast:10, color:8, warm:0, sharp:8, zoom:0 };
 let aqua = { contrast:15, cool:18, sharp:8, bright:6 };
 let of   = { blur:10, focus:40 };
 let sports = { sharp:10, contrast:18, bright:6, color:8 };
+let beauty = { smooth: 6, bright: 10 };
 let rearselfie = { beauty:10, warm:6, mirror:1 };
 
 /* ===== UI helpers ===== */
@@ -463,15 +469,34 @@ function setGuideFor(kind){
     gLeft.classList.toggle("active", !toRight);
     gText.textContent = toRight ? "→ 오른쪽으로 천천히" : "← 왼쪽으로 천천히";
     showGuide(true);
+  } else if(kind==="motionpano"){
+    const count = mpUrls.length;
+    gSub.textContent = `셔터 2~${mpMax}번 (현재 ${count}/${mpMax})`;
+    const toRight = (count % 2 === 0);
+    gRight.classList.toggle("active", toRight);
+    gLeft.classList.toggle("active", !toRight);
+    gText.textContent = toRight ? "→ 오른쪽으로 조금씩" : "← 왼쪽으로 조금씩";
+    showGuide(true);
   } else {
     showGuide(false);
   }
 }
 
 function updateShutterUI(){
-  // VIDEO / SLOWMO / FASTMO 모두 녹화중이면 빨간모드
   if((mode==="video" || mode==="slowmo" || mode==="fastmo") && isRecording) shutter.classList.add("shutterRec");
   else shutter.classList.remove("shutterRec");
+}
+
+/* ===== strip builders ===== */
+function rebuildStrip(urls, sel){
+  strip.innerHTML="";
+  urls.forEach((u, idx)=>{
+    const t = document.createElement("div");
+    t.className="t"+(idx===sel?" active":"");
+    const im = new Image(); im.src=u;
+    t.appendChild(im);
+    strip.appendChild(t);
+  });
 }
 
 /* ===== render single-frame modes ===== */
@@ -604,6 +629,39 @@ function renderSports(){
   label("SPORTS");
 }
 
+function renderBeauty(){
+  if(!baseImg) return;
+  drawCover(baseImg);
+
+  // S5 느낌: 살짝 밝게 + 부드럽게
+  const tmp = document.createElement("canvas");
+  tmp.width = canvas.width; tmp.height = canvas.height;
+  const tctx = tmp.getContext("2d");
+  tctx.drawImage(canvas,0,0);
+
+  ctx.save();
+  ctx.filter = `brightness(${100 + beauty.bright}%) saturate(108%)`;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(tmp,0,0);
+  ctx.restore();
+
+  const b = Math.max(0, beauty.smooth);
+  if(b > 0){
+    const t2 = document.createElement("canvas");
+    t2.width = canvas.width; t2.height = canvas.height;
+    const x2 = t2.getContext("2d");
+    x2.filter = `blur(${Math.max(1, b/2)}px)`;
+    x2.drawImage(canvas,0,0);
+
+    ctx.save();
+    ctx.globalAlpha = clamp(b/18, 0.08, 0.55);
+    ctx.drawImage(t2,0,0);
+    ctx.restore();
+  }
+
+  label("BEAUTY FACE");
+}
+
 function renderRearSelfie(){
   if(!baseImg) return;
 
@@ -616,256 +674,22 @@ function renderRearSelfie(){
   drawCover(baseImg);
   ctx.restore();
 
-  const beauty = rearselfie.beauty;
-  if(beauty>0){
+  const beautyLv = rearselfie.beauty;
+  if(beautyLv>0){
     const temp = document.createElement("canvas");
     temp.width = canvas.width; temp.height = canvas.height;
     const tctx = temp.getContext("2d");
-    tctx.filter = `blur(${Math.max(1, beauty/2)}px)`;
+    tctx.filter = `blur(${Math.max(1, beautyLv/2)}px)`;
     tctx.drawImage(canvas,0,0);
 
     ctx.save();
-    ctx.globalAlpha = clamp(beauty/28, 0.05, 0.55);
+    ctx.globalAlpha = clamp(beautyLv/28, 0.05, 0.55);
     ctx.drawImage(temp,0,0);
     ctx.restore();
   }
 
   applyWarmth(rearselfie.warm);
   label("REAR CAM SELFIE");
-}
-
-/* ===== strip builders ===== */
-function rebuildStrip(urls, sel){
-  strip.innerHTML="";
-  urls.forEach((u, idx)=>{
-    const t = document.createElement("div");
-    t.className="t"+(idx===sel?" active":"");
-    const im = new Image(); im.src=u;
-    t.appendChild(im);
-    strip.appendChild(t);
-  });
-}
-
-/* ===== mode UI ===== */
-function setMode(next){
-  mode = next;
-  document.querySelectorAll(".mode").forEach(b=>b.classList.toggle("active", b.dataset.mode===mode));
-
-  btnSave.disabled = true;
-  showControls(false);
-  showStrip(false);
-  setGuideFor(null);
-  hintRight.textContent = "";
-
-  if(mode==="photo"){
-    topTitle.textContent="S5 사진";
-    topChip.textContent="PHOTO";
-    hintText.innerHTML = `셔터로 <b>사진 촬영</b>`;
-    btnAlt.textContent="전/후";
-    btnSave.textContent="저장";
-    hintRight.textContent = usingFront ? "전면" : "후면";
-  }
-
-  if(mode==="video"){
-    topTitle.textContent="S5 동영상";
-    topChip.textContent="VIDEO";
-    hintText.innerHTML = `셔터로 <b>녹화 시작/정지</b>`;
-    btnAlt.textContent="전/후";
-    btnSave.textContent="저장";
-    hintRight.textContent = isRecording ? "REC" : "";
-  }
-
-  if(mode==="slowmo"){
-    topTitle.textContent="S5 슬로우모션";
-    topChip.textContent="SLOW 0.5x";
-    hintText.innerHTML = `셔터로 <b>녹화 시작/정지</b> → 저장하면 0.5x로 재생`;
-    btnAlt.textContent="전/후";
-    btnSave.textContent="저장";
-    hintRight.textContent = isRecording ? "REC" : "0.5x";
-  }
-
-  if(mode==="fastmo"){
-    topTitle.textContent="S5 패스트모션";
-    topChip.textContent="FAST 4x";
-    hintText.innerHTML = `셔터로 <b>녹화 시작/정지</b> → 저장하면 4x로 재생`;
-    btnAlt.textContent="전/후";
-    btnSave.textContent="저장";
-    hintRight.textContent = isRecording ? "REC" : "4x";
-  }
-
-  if(mode==="pano"){
-    topTitle.textContent="S5 파노라마";
-    topChip.textContent="PANORAMA";
-    hintText.innerHTML = `셔터를 여러 번 눌러 <b>가로 파노라마</b> 합성`;
-    btnAlt.textContent="초기화";
-    btnSave.textContent="저장";
-    showStrip(true);
-    setGuideFor("pano");
-    rebuildStrip(panoUrls, panoSel);
-    if(panoImgs.length>=2){ stitchBlend(panoImgs); label(`PANORAMA (${panoImgs.length})`); btnSave.disabled=false; }
-    else { ctx.clearRect(0,0,canvas.width,canvas.height); label("PANORAMA"); }
-  }
-
-  if(mode==="pro"){
-    topTitle.textContent="S5 프로(느낌)";
-    topChip.textContent="PRO";
-    hintText.innerHTML = `셔터로 캡처 후, 슬라이더로 <b>수동 보정</b>`;
-    btnAlt.textContent="리셋";
-    btnSave.textContent="저장";
-    showControls(true);
-    setupSlidersPro();
-    repaintSingle();
-  }
-
-  if(mode==="shotmore"){
-    topTitle.textContent="S5 샷&모어";
-    topChip.textContent="SHOT & MORE";
-    hintText.innerHTML = `셔터로 여러 장 찍고, 아래에서 골라 <b>저장</b>`;
-    btnAlt.textContent="초기화";
-    btnSave.textContent="저장(선택)";
-    showStrip(true);
-    rebuildStrip(smUrls, smSel);
-    if(smImgs.length){
-      baseImg = smImgs[smSel];
-      baseUrl = smUrls[smSel];
-      renderPhotoLabel();
-      btnSave.disabled = false;
-      setThumbImage(smUrls[smSel]);
-      hintRight.textContent = `${smImgs.length}장`;
-    }else{
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      label("SHOT & MORE");
-      hintRight.textContent = "0장";
-    }
-  }
-
-  if(mode==="aqua"){
-    topTitle.textContent="S5 아쿠아";
-    topChip.textContent="AQUA";
-    hintText.innerHTML = `셔터로 캡처 → <b>아쿠아 보정</b> → 저장`;
-    btnAlt.textContent="리셋";
-    btnSave.textContent="저장";
-    showControls(true);
-    setupSlidersAqua();
-    repaintSingle();
-  }
-
-  if(mode==="outfocus"){
-    topTitle.textContent="S5 아웃포커스";
-    topChip.textContent="OUT FOCUS";
-    hintText.innerHTML = `셔터로 캡처 → 중앙 또렷/주변 블러`;
-    btnAlt.textContent="리셋";
-    btnSave.textContent="저장";
-    showControls(true);
-    setupSlidersOutFocus();
-    repaintSingle();
-  }
-
-  if(mode==="wide"){
-    topTitle.textContent="S5 와이드셀프샷";
-    topChip.textContent="WIDE SELFIE";
-    hintText.innerHTML = `셔터로 2~6장 추가하고, 폰을 <b>좌우로</b> 이동`;
-    btnAlt.textContent="초기화";
-    btnSave.textContent="저장";
-    showStrip(true);
-    setGuideFor("wide");
-    rebuildStrip(wideUrls, wideSel);
-    if(wideImgs.length>=2){ stitchBlend(wideImgs); label(`WIDE SELFIE (${wideImgs.length})`); btnSave.disabled=false; }
-    else { ctx.clearRect(0,0,canvas.width,canvas.height); label("WIDE SELFIE"); }
-    hintRight.textContent = `${wideImgs.length}장`;
-  }
-
-  if(mode==="sports"){
-    topTitle.textContent="S5 스포츠";
-    topChip.textContent="SPORTS";
-    hintText.innerHTML = `셔터로 캡처 → <b>선명/대비</b> → 저장`;
-    btnAlt.textContent="리셋";
-    btnSave.textContent="저장";
-    showControls(true);
-    setupSlidersSports();
-    repaintSingle();
-  }
-
-  if(mode==="rearselfie"){
-    topTitle.textContent="S5 리어캠 셀피";
-    topChip.textContent="REAR SELFIE";
-    hintText.innerHTML = `셔터로 캡처 → <b>셀카처럼</b> 보정`;
-    btnAlt.textContent="리셋";
-    btnSave.textContent="저장";
-    showControls(true);
-    setupSlidersRearSelfie();
-    repaintSingle();
-  }
-
-  updateShutterUI();
-}
-
-/* ===== sliders setup ===== */
-function setupSlidersPro(){
-  r1.style.display=r2.style.display=r3.style.display=r4.style.display="flex";
-  l1.textContent="노출";   s1.min=-20; s1.max=20; s1.value=pro.exposure;
-  l2.textContent="대비";   s2.min=-20; s2.max=40; s2.value=pro.contrast;
-  l3.textContent="색감";   s3.min=-20; s3.max=30; s3.value=pro.color;
-  l4.textContent="줌";     s4.min=0;   s4.max=30; s4.value=pro.zoom;
-
-  const on = ()=>{ pro.exposure=+s1.value; pro.contrast=+s2.value; pro.color=+s3.value; pro.zoom=+s4.value; repaintSingle(); };
-  s1.oninput=on; s2.oninput=on; s3.oninput=on; s4.oninput=on;
-}
-function setupSlidersAqua(){
-  r1.style.display=r2.style.display=r3.style.display=r4.style.display="flex";
-  l1.textContent="대비";     s1.min=-40; s1.max=60;  s1.value=aqua.contrast;
-  l2.textContent="차가움";   s2.min=-30; s2.max=40;  s2.value=aqua.cool;
-  l3.textContent="선명도";   s3.min=0;   s3.max=20;  s3.value=aqua.sharp;
-  l4.textContent="밝기";     s4.min=-20; s4.max=20;  s4.value=aqua.bright;
-
-  const on=()=>{ aqua.contrast=+s1.value; aqua.cool=+s2.value; aqua.sharp=+s3.value; aqua.bright=+s4.value; repaintSingle(); };
-  s1.oninput=on; s2.oninput=on; s3.oninput=on; s4.oninput=on;
-}
-function setupSlidersOutFocus(){
-  r1.style.display=r2.style.display="flex";
-  r3.style.display=r4.style.display="none";
-  l1.textContent="블러";      s1.min=0;  s1.max=25; s1.value=of.blur;
-  l2.textContent="중앙크기";  s2.min=20; s2.max=70; s2.value=of.focus;
-
-  const on=()=>{ of.blur=+s1.value; of.focus=+s2.value; repaintSingle(); };
-  s1.oninput=on; s2.oninput=on;
-}
-function setupSlidersSports(){
-  r1.style.display=r2.style.display=r3.style.display=r4.style.display="flex";
-  l1.textContent="선명도";   s1.min=0;   s1.max=20;  s1.value=sports.sharp;
-  l2.textContent="대비";     s2.min=-20; s2.max=50;  s2.value=sports.contrast;
-  l3.textContent="밝기";     s3.min=-20; s3.max=20;  s3.value=sports.bright;
-  l4.textContent="색감";     s4.min=-20; s4.max=30;  s4.value=sports.color;
-
-  const on=()=>{ sports.sharp=+s1.value; sports.contrast=+s2.value; sports.bright=+s3.value; sports.color=+s4.value; repaintSingle(); };
-  s1.oninput=on; s2.oninput=on; s3.oninput=on; s4.oninput=on;
-}
-function setupSlidersRearSelfie(){
-  r1.style.display=r2.style.display=r3.style.display="flex";
-  r4.style.display="none";
-  l1.textContent="뽀샤시";  s1.min=0;   s1.max=20; s1.value=rearselfie.beauty;
-  l2.textContent="따뜻함";  s2.min=-12; s2.max=12; s2.value=rearselfie.warm;
-  l3.textContent="미러";    s3.min=0;   s3.max=1;  s3.step=1; s3.value=rearselfie.mirror;
-
-  const on=()=>{ rearselfie.beauty=+s1.value; rearselfie.warm=+s2.value; rearselfie.mirror=+s3.value; repaintSingle(); };
-  s1.oninput=on; s2.oninput=on; s3.oninput=on;
-}
-
-/* ===== repaint single ===== */
-function repaintSingle(){
-  btnSave.disabled = true;
-  const needs = ["pro","aqua","outfocus","sports","rearselfie","photo"];
-  if(needs.includes(mode) && !baseImg){
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    label(topChip.textContent);
-    return;
-  }
-  if(mode==="photo"){ renderPhotoLabel(); btnSave.disabled = !baseImg; return; }
-  if(mode==="pro"){ renderPro(); btnSave.disabled = !baseImg; return; }
-  if(mode==="aqua"){ renderAqua(); btnSave.disabled = !baseImg; return; }
-  if(mode==="outfocus"){ renderOutFocus(); btnSave.disabled = !baseImg; return; }
-  if(mode==="sports"){ renderSports(); btnSave.disabled = !baseImg; return; }
-  if(mode==="rearselfie"){ renderRearSelfie(); btnSave.disabled = !baseImg; return; }
 }
 
 /* ===== capture base ===== */
@@ -878,58 +702,64 @@ async function captureBase(){
   return {url, im};
 }
 
-/* ===== multi frame ===== */
-async function panoAdd(){
-  if(panoUrls.length >= panoMax) return;
-  const {url, im} = await captureBase();
-  panoUrls.push(url); panoImgs.push(im);
-  panoSel = panoImgs.length - 1;
-  showStrip(true);
-  rebuildStrip(panoUrls, panoSel);
-  setGuideFor("pano");
-  hintRight.textContent = `${panoImgs.length}장`;
+/* ===== motion panorama save ===== */
+function saveMotionPanoramaWebm(){
+  if(mpImgs.length < 2) return;
 
-  if(panoImgs.length>=2){
-    stitchBlend(panoImgs);
-    label(`PANORAMA (${panoImgs.length})`);
-    btnSave.disabled = false;
-  }else{
-    drawCover(im); label("PANORAMA (1)");
-    btnSave.disabled = true;
-  }
-}
+  const c = document.createElement("canvas");
+  c.width = canvas.width;
+  c.height = canvas.height;
+  const cx = c.getContext("2d");
 
-async function wideAdd(){
-  if(wideUrls.length >= wideMax) return;
-  const {url, im} = await captureBase();
-  wideUrls.push(url); wideImgs.push(im);
-  wideSel = wideImgs.length - 1;
-  showStrip(true);
-  rebuildStrip(wideUrls, wideSel);
-  setGuideFor("wide");
-  hintRight.textContent = `${wideImgs.length}장`;
+  const stream = c.captureStream(15);
+  const rec = new MediaRecorder(stream, { mimeType:"video/webm;codecs=vp8" });
+  const chunks = [];
 
-  if(wideImgs.length>=2){
-    stitchBlend(wideImgs);
-    label(`WIDE SELFIE (${wideImgs.length})`);
-    btnSave.disabled = false;
-  }else{
-    drawCover(im); label("WIDE SELFIE (1)");
-    btnSave.disabled = true;
-  }
-}
+  rec.ondataavailable = (e)=>{ if(e.data && e.data.size) chunks.push(e.data); };
+  rec.onstop = ()=>{
+    const blob = new Blob(chunks, { type:"video/webm" });
+    downloadBlob(blob, "S5_MotionPanorama.webm");
+  };
 
-async function shotMoreAdd(){
-  if(smUrls.length >= 16) return;
-  const {url, im} = await captureBase();
-  smUrls.push(url); smImgs.push(im);
-  smSel = smImgs.length - 1;
-  showStrip(true);
-  rebuildStrip(smUrls, smSel);
-  hintRight.textContent = `${smImgs.length}장`;
-  drawCover(im);
-  label(`SHOT & MORE #${smSel+1}`);
-  btnSave.disabled = false;
+  rec.start();
+
+  let i = 0;
+  const tick = ()=>{
+    cx.clearRect(0,0,c.width,c.height);
+    // 살짝 줌 인/아웃 느낌(아주 약하게)
+    const z = 1.0 + (Math.sin(i*0.25)*0.006);
+    const w = c.width, h = c.height;
+    const dw = w*z, dh = h*z;
+    const dx = (w - dw)/2, dy = (h - dh)/2;
+
+    cx.save();
+    cx.drawImage(mpImgs[i], dx, dy, dw, dh);
+    cx.restore();
+
+    i++;
+    if(i >= mpImgs.length){
+      // 끝나면 1번 더 역방향(부드럽게)
+      for(let j=mpImgs.length-2; j>0; j--){
+        cx.clearRect(0,0,c.width,c.height);
+        cx.drawImage(mpImgs[j], 0,0,c.width,c.height);
+      }
+      rec.stop();
+      return;
+    }
+    requestAnimationFrame(tick);
+  };
+
+  // 프레임 간격(대충 120ms 느낌)
+  const interval = setInterval(()=>{
+    if(i >= mpImgs.length){ clearInterval(interval); return; }
+    cx.clearRect(0,0,c.width,c.height);
+    cx.drawImage(mpImgs[i], 0,0,c.width,c.height);
+    i++;
+    if(i >= mpImgs.length){
+      clearInterval(interval);
+      rec.stop();
+    }
+  }, 120);
 }
 
 /* ===== normal video ===== */
@@ -1044,14 +874,344 @@ async function transcodeSpeedViaCanvas(blob, rate){
   return await done;
 }
 
-/* ===== UI events ===== */
+/* ===== slider setups ===== */
+function setupSlidersPro(){
+  r1.style.display=r2.style.display=r3.style.display=r4.style.display="flex";
+  l1.textContent="노출";   s1.min=-20; s1.max=20; s1.value=pro.exposure;
+  l2.textContent="대비";   s2.min=-20; s2.max=40; s2.value=pro.contrast;
+  l3.textContent="색감";   s3.min=-20; s3.max=30; s3.value=pro.color;
+  l4.textContent="줌";     s4.min=0;   s4.max=30; s4.value=pro.zoom;
+
+  const on = ()=>{ pro.exposure=+s1.value; pro.contrast=+s2.value; pro.color=+s3.value; pro.zoom=+s4.value; repaintSingle(); };
+  s1.oninput=on; s2.oninput=on; s3.oninput=on; s4.oninput=on;
+}
+function setupSlidersAqua(){
+  r1.style.display=r2.style.display=r3.style.display=r4.style.display="flex";
+  l1.textContent="대비";     s1.min=-40; s1.max=60;  s1.value=aqua.contrast;
+  l2.textContent="차가움";   s2.min=-30; s2.max=40;  s2.value=aqua.cool;
+  l3.textContent="선명도";   s3.min=0;   s3.max=20;  s3.value=aqua.sharp;
+  l4.textContent="밝기";     s4.min=-20; s4.max=20;  s4.value=aqua.bright;
+
+  const on=()=>{ aqua.contrast=+s1.value; aqua.cool=+s2.value; aqua.sharp=+s3.value; aqua.bright=+s4.value; repaintSingle(); };
+  s1.oninput=on; s2.oninput=on; s3.oninput=on; s4.oninput=on;
+}
+function setupSlidersOutFocus(){
+  r1.style.display=r2.style.display="flex";
+  r3.style.display=r4.style.display="none";
+  l1.textContent="블러";      s1.min=0;  s1.max=25; s1.value=of.blur;
+  l2.textContent="중앙크기";  s2.min=20; s2.max=70; s2.value=of.focus;
+
+  const on=()=>{ of.blur=+s1.value; of.focus=+s2.value; repaintSingle(); };
+  s1.oninput=on; s2.oninput=on;
+}
+function setupSlidersSports(){
+  r1.style.display=r2.style.display=r3.style.display=r4.style.display="flex";
+  l1.textContent="선명도";   s1.min=0;   s1.max=20;  s1.value=sports.sharp;
+  l2.textContent="대비";     s2.min=-20; s2.max=50;  s2.value=sports.contrast;
+  l3.textContent="밝기";     s3.min=-20; s3.max=20;  s3.value=sports.bright;
+  l4.textContent="색감";     s4.min=-20; s4.max=30;  s4.value=sports.color;
+
+  const on=()=>{ sports.sharp=+s1.value; sports.contrast=+s2.value; sports.bright=+s3.value; sports.color=+s4.value; repaintSingle(); };
+  s1.oninput=on; s2.oninput=on; s3.oninput=on; s4.oninput=on;
+}
+function setupSlidersBeauty(){
+  r1.style.display=r2.style.display="flex";
+  r3.style.display=r4.style.display="none";
+  l1.textContent="부드러움"; s1.min=0;  s1.max=20; s1.value=beauty.smooth;
+  l2.textContent="밝기";     s2.min=-10; s2.max=25; s2.value=beauty.bright;
+
+  const on=()=>{ beauty.smooth=+s1.value; beauty.bright=+s2.value; repaintSingle(); };
+  s1.oninput=on; s2.oninput=on;
+}
+function setupSlidersRearSelfie(){
+  r1.style.display=r2.style.display=r3.style.display="flex";
+  r4.style.display="none";
+  l1.textContent="뽀샤시";  s1.min=0;   s1.max=20; s1.value=rearselfie.beauty;
+  l2.textContent="따뜻함";  s2.min=-12; s2.max=12; s2.value=rearselfie.warm;
+  l3.textContent="미러";    s3.min=0;   s3.max=1;  s3.step=1; s3.value=rearselfie.mirror;
+
+  const on=()=>{ rearselfie.beauty=+s1.value; rearselfie.warm=+s2.value; rearselfie.mirror=+s3.value; repaintSingle(); };
+  s1.oninput=on; s2.oninput=on; s3.oninput=on;
+}
+
+/* ===== repaint single ===== */
+function repaintSingle(){
+  btnSave.disabled = true;
+
+  if(!baseImg){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    label(topChip.textContent);
+    return;
+  }
+
+  if(mode==="photo"){ renderPhotoLabel(); btnSave.disabled=false; return; }
+  if(mode==="pro"){ renderPro(); btnSave.disabled=false; return; }
+  if(mode==="aqua"){ renderAqua(); btnSave.disabled=false; return; }
+  if(mode==="outfocus"){ renderOutFocus(); btnSave.disabled=false; return; }
+  if(mode==="sports"){ renderSports(); btnSave.disabled=false; return; }
+  if(mode==="beauty"){ renderBeauty(); btnSave.disabled=false; return; }
+  if(mode==="rearselfie"){ renderRearSelfie(); btnSave.disabled=false; return; }
+
+  // motionpano는 여기서 렌더 안 함(프레임 누적/저장)
+}
+
+/* ===== multi frame ===== */
+async function panoAdd(){
+  if(panoUrls.length >= panoMax) return;
+  const {url, im} = await captureBase();
+  panoUrls.push(url); panoImgs.push(im);
+  panoSel = panoImgs.length - 1;
+  showStrip(true);
+  rebuildStrip(panoUrls, panoSel);
+  setGuideFor("pano");
+  hintRight.textContent = `${panoImgs.length}장`;
+
+  if(panoImgs.length>=2){
+    stitchBlend(panoImgs);
+    label(`PANORAMA (${panoImgs.length})`);
+    btnSave.disabled = false;
+  }else{
+    drawCover(im); label("PANORAMA (1)");
+    btnSave.disabled = true;
+  }
+}
+
+async function wideAdd(){
+  if(wideUrls.length >= wideMax) return;
+  const {url, im} = await captureBase();
+  wideUrls.push(url); wideImgs.push(im);
+  wideSel = wideImgs.length - 1;
+  showStrip(true);
+  rebuildStrip(wideUrls, wideSel);
+  setGuideFor("wide");
+  hintRight.textContent = `${wideImgs.length}장`;
+
+  if(wideImgs.length>=2){
+    stitchBlend(wideImgs);
+    label(`WIDE SELFIE (${wideImgs.length})`);
+    btnSave.disabled = false;
+  }else{
+    drawCover(im); label("WIDE SELFIE (1)");
+    btnSave.disabled = true;
+  }
+}
+
+async function shotMoreAdd(){
+  if(smUrls.length >= 16) return;
+  const {url, im} = await captureBase();
+  smUrls.push(url); smImgs.push(im);
+  smSel = smImgs.length - 1;
+  showStrip(true);
+  rebuildStrip(smUrls, smSel);
+  hintRight.textContent = `${smImgs.length}장`;
+  drawCover(im);
+  label(`SHOT & MORE #${smSel+1}`);
+  btnSave.disabled = false;
+}
+
+async function motionPanoAdd(){
+  if(mpUrls.length >= mpMax) return;
+  const {url, im} = await captureBase();
+  mpUrls.push(url); mpImgs.push(im);
+  mpSel = mpImgs.length - 1;
+  showStrip(true);
+  rebuildStrip(mpUrls, mpSel);
+  setGuideFor("motionpano");
+  hintRight.textContent = `${mpImgs.length}장`;
+
+  // 프리뷰는 마지막 프레임 보여주기
+  drawCover(im);
+  label(`MOTION (${mpImgs.length})`);
+  btnSave.disabled = (mpImgs.length < 2);
+}
+
+/* ===== mode UI ===== */
+function setMode(next){
+  mode = next;
+  document.querySelectorAll(".mode").forEach(b=>b.classList.toggle("active", b.dataset.mode===mode));
+
+  btnSave.disabled = true;
+  showControls(false);
+  showStrip(false);
+  setGuideFor(null);
+  hintRight.textContent = "";
+
+  if(mode==="photo"){
+    topTitle.textContent="S5 사진";
+    topChip.textContent="PHOTO";
+    hintText.innerHTML = `셔터로 <b>사진 촬영</b>`;
+    btnAlt.textContent="전/후";
+    btnSave.textContent="저장";
+    hintRight.textContent = usingFront ? "전면" : "후면";
+  }
+
+  if(mode==="video"){
+    topTitle.textContent="S5 동영상";
+    topChip.textContent="VIDEO";
+    hintText.innerHTML = `셔터로 <b>녹화 시작/정지</b>`;
+    btnAlt.textContent="전/후";
+    btnSave.textContent="저장";
+    hintRight.textContent = isRecording ? "REC" : "";
+  }
+
+  if(mode==="slowmo"){
+    topTitle.textContent="S5 슬로우모션";
+    topChip.textContent="SLOW 0.5x";
+    hintText.innerHTML = `셔터로 <b>녹화 시작/정지</b> → 저장하면 0.5x`;
+    btnAlt.textContent="전/후";
+    btnSave.textContent="저장";
+    hintRight.textContent = isRecording ? "REC" : "0.5x";
+  }
+
+  if(mode==="fastmo"){
+    topTitle.textContent="S5 패스트모션";
+    topChip.textContent="FAST 4x";
+    hintText.innerHTML = `셔터로 <b>녹화 시작/정지</b> → 저장하면 4x`;
+    btnAlt.textContent="전/후";
+    btnSave.textContent="저장";
+    hintRight.textContent = isRecording ? "REC" : "4x";
+  }
+
+  if(mode==="pano"){
+    topTitle.textContent="S5 파노라마";
+    topChip.textContent="PANORAMA";
+    hintText.innerHTML = `셔터를 여러 번 눌러 <b>가로 파노라마</b> 합성`;
+    btnAlt.textContent="초기화";
+    btnSave.textContent="저장";
+    showStrip(true);
+    setGuideFor("pano");
+    rebuildStrip(panoUrls, panoSel);
+    if(panoImgs.length>=2){ stitchBlend(panoImgs); label(`PANORAMA (${panoImgs.length})`); btnSave.disabled=false; }
+    else { ctx.clearRect(0,0,canvas.width,canvas.height); label("PANORAMA"); }
+  }
+
+  if(mode==="motionpano"){
+    topTitle.textContent="S5 모션 파노라마";
+    topChip.textContent="MOTION";
+    hintText.innerHTML = `셔터 2번 이상! 폰을 <b>좌우로 조금씩</b> 이동`;
+    btnAlt.textContent="초기화";
+    btnSave.textContent="저장(WebM)";
+    showStrip(true);
+    setGuideFor("motionpano");
+    rebuildStrip(mpUrls, mpSel);
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    label("MOTION");
+    hintRight.textContent = `${mpImgs.length}장`;
+    btnSave.disabled = (mpImgs.length < 2);
+  }
+
+  if(mode==="pro"){
+    topTitle.textContent="S5 프로(느낌)";
+    topChip.textContent="PRO";
+    hintText.innerHTML = `셔터로 캡처 후, 슬라이더로 <b>수동 보정</b>`;
+    btnAlt.textContent="리셋";
+    btnSave.textContent="저장";
+    showControls(true);
+    setupSlidersPro();
+    repaintSingle();
+  }
+
+  if(mode==="shotmore"){
+    topTitle.textContent="S5 샷&모어";
+    topChip.textContent="SHOT & MORE";
+    hintText.innerHTML = `셔터로 여러 장 찍고, 아래에서 골라 <b>저장</b>`;
+    btnAlt.textContent="초기화";
+    btnSave.textContent="저장(선택)";
+    showStrip(true);
+    rebuildStrip(smUrls, smSel);
+    if(smImgs.length){
+      baseImg = smImgs[smSel];
+      baseUrl = smUrls[smSel];
+      renderPhotoLabel();
+      btnSave.disabled = false;
+      setThumbImage(smUrls[smSel]);
+      hintRight.textContent = `${smImgs.length}장`;
+    }else{
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      label("SHOT & MORE");
+      hintRight.textContent = "0장";
+    }
+  }
+
+  if(mode==="aqua"){
+    topTitle.textContent="S5 아쿠아";
+    topChip.textContent="AQUA";
+    hintText.innerHTML = `셔터로 캡처 → <b>아쿠아 보정</b> → 저장`;
+    btnAlt.textContent="리셋";
+    btnSave.textContent="저장";
+    showControls(true);
+    setupSlidersAqua();
+    repaintSingle();
+  }
+
+  if(mode==="outfocus"){
+    topTitle.textContent="S5 아웃포커스";
+    topChip.textContent="OUT FOCUS";
+    hintText.innerHTML = `셔터로 캡처 → 중앙 또렷/주변 블러`;
+    btnAlt.textContent="리셋";
+    btnSave.textContent="저장";
+    showControls(true);
+    setupSlidersOutFocus();
+    repaintSingle();
+  }
+
+  if(mode==="wide"){
+    topTitle.textContent="S5 와이드셀프샷";
+    topChip.textContent="WIDE SELFIE";
+    hintText.innerHTML = `셔터로 2~6장 추가하고, 폰을 <b>좌우로</b> 이동`;
+    btnAlt.textContent="초기화";
+    btnSave.textContent="저장";
+    showStrip(true);
+    setGuideFor("wide");
+    rebuildStrip(wideUrls, wideSel);
+    if(wideImgs.length>=2){ stitchBlend(wideImgs); label(`WIDE SELFIE (${wideImgs.length})`); btnSave.disabled=false; }
+    else { ctx.clearRect(0,0,canvas.width,canvas.height); label("WIDE SELFIE"); }
+    hintRight.textContent = `${wideImgs.length}장`;
+  }
+
+  if(mode==="sports"){
+    topTitle.textContent="S5 스포츠";
+    topChip.textContent="SPORTS";
+    hintText.innerHTML = `셔터로 캡처 → <b>선명/대비</b> → 저장`;
+    btnAlt.textContent="리셋";
+    btnSave.textContent="저장";
+    showControls(true);
+    setupSlidersSports();
+    repaintSingle();
+  }
+
+  if(mode==="beauty"){
+    topTitle.textContent="S5 뷰티페이스";
+    topChip.textContent="BEAUTY";
+    hintText.innerHTML = `셔터로 캡처 → <b>밝고 부드럽게</b>`;
+    btnAlt.textContent="리셋";
+    btnSave.textContent="저장";
+    showControls(true);
+    setupSlidersBeauty();
+    repaintSingle();
+  }
+
+  if(mode==="rearselfie"){
+    topTitle.textContent="S5 리어캠 셀피";
+    topChip.textContent="REAR SELFIE";
+    hintText.innerHTML = `셔터로 캡처 → <b>셀카처럼</b> 보정`;
+    btnAlt.textContent="리셋";
+    btnSave.textContent="저장";
+    showControls(true);
+    setupSlidersRearSelfie();
+    repaintSingle();
+  }
+
+  updateShutterUI();
+}
+
+/* ===== events ===== */
 document.getElementById("modebar").addEventListener("click",(e)=>{
   const b = e.target.closest(".mode");
   if(!b) return;
   setMode(b.dataset.mode);
 });
 
-// strip selection
 strip.addEventListener("click",(e)=>{
   const tile = e.target.closest(".t");
   if(!tile) return;
@@ -1070,6 +1230,15 @@ strip.addEventListener("click",(e)=>{
   }
   if(mode==="pano"){ panoSel = idx; rebuildStrip(panoUrls, panoSel); }
   if(mode==="wide"){ wideSel = idx; rebuildStrip(wideUrls, wideSel); }
+  if(mode==="motionpano"){
+    mpSel = idx;
+    rebuildStrip(mpUrls, mpSel);
+    baseImg = mpImgs[mpSel];
+    baseUrl = mpUrls[mpSel];
+    setThumbImage(baseUrl);
+    drawCover(baseImg);
+    label(`MOTION (${mpSel+1}/${mpImgs.length})`);
+  }
 });
 
 shutter.addEventListener("click", async ()=>{
@@ -1099,7 +1268,9 @@ shutter.addEventListener("click", async ()=>{
   if(mode==="pano"){ await panoAdd(); return; }
   if(mode==="wide"){ await wideAdd(); return; }
   if(mode==="shotmore"){ await shotMoreAdd(); return; }
+  if(mode==="motionpano"){ await motionPanoAdd(); return; }
 
+  // 단일 캡처 모드들
   await captureBase();
 
   if(mode==="photo"){
@@ -1153,6 +1324,16 @@ btnAlt.addEventListener("click", async ()=>{
     hintRight.textContent = "0장";
     return;
   }
+  if(mode==="motionpano"){
+    mpUrls=[]; mpImgs=[]; mpSel=0;
+    strip.innerHTML="";
+    setGuideFor("motionpano");
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    label("MOTION");
+    btnSave.disabled = true;
+    hintRight.textContent = "0장";
+    return;
+  }
 
   if(mode==="pro"){
     pro = { exposure:0, contrast:10, color:8, warm:0, sharp:8, zoom:0 };
@@ -1178,6 +1359,13 @@ btnAlt.addEventListener("click", async ()=>{
   if(mode==="sports"){
     sports = { sharp:10, contrast:18, bright:6, color:8 };
     setupSlidersSports();
+    repaintSingle();
+    btnSave.disabled = !baseImg;
+    return;
+  }
+  if(mode==="beauty"){
+    beauty = { smooth: 6, bright: 10 };
+    setupSlidersBeauty();
     repaintSingle();
     btnSave.disabled = !baseImg;
     return;
@@ -1232,6 +1420,13 @@ btnSave.addEventListener("click", ()=>{
     return;
   }
 
+  if(mode==="motionpano"){
+    if(mpImgs.length < 2) return;
+    // 저장은 WebM(움직이는 느낌)
+    saveMotionPanoramaWebm();
+    return;
+  }
+
   if(mode==="photo"){
     if(!baseImg) return;
     drawCover(baseImg); label("PHOTO");
@@ -1254,12 +1449,15 @@ btnSave.addEventListener("click", ()=>{
     if(!baseImg) return;
     renderSports(); downloadCanvas("S5_Sports.jpg"); return;
   }
+  if(mode==="beauty"){
+    if(!baseImg) return;
+    renderBeauty(); downloadCanvas("S5_BeautyFace.jpg"); return;
+  }
   if(mode==="rearselfie"){
     if(!baseImg) return;
     renderRearSelfie(); downloadCanvas("S5_RearCamSelfie.jpg"); return;
   }
 });
-
 /* ===== boot ===== */
 (async function boot(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
@@ -1275,4 +1473,4 @@ btnSave.addEventListener("click", ()=>{
 })();
 </script>
 </body>
-  </html>
+</html>
