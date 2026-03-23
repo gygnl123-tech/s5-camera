@@ -3,21 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>넘어짐 감지 백룸 카메라</title>
+  <title>2단계 백룸 카메라</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     html, body {
       margin: 0;
       padding: 0;
-      background: #000;
-      color: #fff;
-      font-family: Arial, sans-serif;
-      overflow: hidden;
       width: 100%;
       height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: Arial, sans-serif;
+      color: white;
     }
 
     #app {
@@ -36,17 +34,25 @@
       object-fit: cover;
     }
 
-    #overlayText {
+    #ui {
       position: absolute;
-      top: 14px;
-      left: 14px;
-      z-index: 20;
+      top: 12px;
+      left: 12px;
+      z-index: 50;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: min(92vw, 420px);
+    }
+
+    .panel {
       background: rgba(0,0,0,0.45);
+      border-radius: 14px;
       padding: 10px 14px;
-      border-radius: 12px;
-      font-size: 14px;
-      line-height: 1.5;
+      line-height: 1.45;
       white-space: pre-line;
+      backdrop-filter: blur(4px);
+      font-size: 14px;
     }
 
     #controls {
@@ -54,7 +60,7 @@
       bottom: 18px;
       left: 50%;
       transform: translateX(-50%);
-      z-index: 25;
+      z-index: 60;
       display: flex;
       gap: 10px;
       flex-wrap: wrap;
@@ -66,39 +72,193 @@
       border-radius: 999px;
       padding: 12px 18px;
       font-size: 15px;
-      cursor: pointer;
-      background: rgba(255,255,255,0.92);
-      color: #111;
       font-weight: bold;
+      cursor: pointer;
+      background: rgba(255,255,255,0.94);
+      color: #111;
     }
 
-    button:hover {
-      opacity: 0.92;
+    button:hover { opacity: 0.92; }
+
+    #yellowWarning {
+      position: absolute;
+      inset: 0;
+      z-index: 25;
+      pointer-events: none;
+      opacity: 0;
+      background:
+        linear-gradient(rgba(255, 230, 80, 0.22), rgba(180, 145, 0, 0.18)),
+        radial-gradient(circle at center, rgba(255,255,190,0.18), rgba(90,70,0,0.28));
+      transition: opacity 0.35s ease;
     }
 
-    #backroomsLayer {
+    #yellowWarning.active {
+      opacity: 1;
+      animation: yellowPulse 1s infinite alternate;
+    }
+
+    #yellowWarningText {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: clamp(24px, 4vw, 46px);
+      font-weight: 900;
+      color: #fff7b8;
+      text-shadow: 0 0 12px rgba(0,0,0,0.55);
+      letter-spacing: 2px;
+      text-align: center;
+    }
+
+    @keyframes yellowPulse {
+      from { filter: brightness(1) saturate(1); }
+      to   { filter: brightness(1.1) saturate(1.2); }
+    }
+
+    #flash {
+      position: absolute;
+      inset: 0;
+      z-index: 70;
+      background: #fff6bf;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    #flash.active {
+      animation: flashAnim 0.45s ease-out;
+    }
+
+    @keyframes flashAnim {
+      0%   { opacity: 0; }
+      25%  { opacity: 0.95; }
+      100% { opacity: 0; }
+    }
+
+    #backroomsScene {
       position: absolute;
       inset: 0;
       z-index: 30;
       display: none;
-      background:
-        repeating-linear-gradient(
-          0deg,
-          rgba(255, 245, 170, 0.08) 0px,
-          rgba(255, 245, 170, 0.08) 2px,
-          rgba(235, 220, 120, 0.12) 2px,
-          rgba(235, 220, 120, 0.12) 4px
-        ),
-        linear-gradient(180deg, #c6b95f 0%, #b7aa55 55%, #8f8342 100%);
-      animation: flicker 0.18s infinite alternate;
       overflow: hidden;
+      background:
+        linear-gradient(180deg, #e4d98a 0%, #d0c46f 20%, #b8aa57 45%, #6d6136 100%);
     }
 
-    #backroomsLayer.active {
+    #backroomsScene.active {
       display: block;
     }
 
-    #backroomsNoise {
+    /* 천장 형광등 */
+    .light {
+      position: absolute;
+      top: 5%;
+      width: 18%;
+      height: 26px;
+      background: linear-gradient(180deg, #fffff7, #f6f1c9);
+      box-shadow:
+        0 0 25px rgba(255,255,220,0.95),
+        0 0 70px rgba(255,255,180,0.35);
+      border-radius: 4px;
+      animation: lightFlicker 0.2s infinite alternate;
+      opacity: 0.95;
+    }
+
+    .light.l1 { left: 10%; }
+    .light.l2 { left: 41%; }
+    .light.l3 { left: 72%; }
+
+    @keyframes lightFlicker {
+      from { opacity: 0.84; filter: brightness(0.97); }
+      to   { opacity: 1; filter: brightness(1.07); }
+    }
+
+    /* 벽지 */
+    #wall {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 62%;
+      background:
+        repeating-linear-gradient(
+          0deg,
+          rgba(122, 102, 32, 0.12) 0px,
+          rgba(122, 102, 32, 0.12) 2px,
+          rgba(255, 240, 165, 0.06) 2px,
+          rgba(255, 240, 165, 0.06) 5px
+        ),
+        repeating-linear-gradient(
+          90deg,
+          rgba(140, 120, 45, 0.15) 0px,
+          rgba(140, 120, 45, 0.15) 3px,
+          rgba(200, 185, 88, 0.08) 3px,
+          rgba(200, 185, 88, 0.08) 18px
+        ),
+        linear-gradient(180deg, #dad07b, #b7aa53);
+      border-bottom: 8px solid #655727;
+    }
+
+    /* 바닥 */
+    #floor {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 38%;
+      background:
+        repeating-linear-gradient(
+          90deg,
+          rgba(70, 58, 24, 0.25) 0px,
+          rgba(70, 58, 24, 0.25) 2px,
+          rgba(110, 94, 40, 0.18) 2px,
+          rgba(110, 94, 40, 0.18) 40px
+        ),
+        repeating-linear-gradient(
+          0deg,
+          rgba(70, 58, 24, 0.22) 0px,
+          rgba(70, 58, 24, 0.22) 2px,
+          rgba(120, 100, 44, 0.15) 2px,
+          rgba(120, 100, 44, 0.15) 28px
+        ),
+        linear-gradient(180deg, #7e6d35, #4b3f1d);
+      transform: perspective(500px) rotateX(70deg);
+      transform-origin: bottom center;
+    }
+
+    /* 복도 느낌 벽 기둥 */
+    .pillar {
+      position: absolute;
+      top: 18%;
+      width: 10%;
+      height: 48%;
+      background:
+        linear-gradient(90deg, rgba(90,75,28,0.35), rgba(230,215,125,0.18), rgba(90,75,28,0.35)),
+        linear-gradient(180deg, #cabd6a, #9b8d46);
+      border-left: 2px solid rgba(70,55,15,0.4);
+      border-right: 2px solid rgba(70,55,15,0.4);
+      opacity: 0.95;
+    }
+
+    .pillar.p1 { left: 8%; }
+    .pillar.p2 { left: 45%; }
+    .pillar.p3 { right: 8%; }
+
+    #backroomsFog {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 50% 55%, rgba(255,255,220,0.18), rgba(0,0,0,0) 38%),
+        radial-gradient(circle at 30% 40%, rgba(255,255,200,0.06), rgba(0,0,0,0) 30%);
+      animation: fogDrift 3s infinite alternate ease-in-out;
+      pointer-events: none;
+    }
+
+    @keyframes fogDrift {
+      from { transform: translateX(-8px) translateY(0px); }
+      to   { transform: translateX(8px) translateY(6px); }
+    }
+
+    #noise {
       position: absolute;
       inset: 0;
       background:
@@ -110,61 +270,58 @@
           rgba(255,255,255,0.01) 2px
         );
       mix-blend-mode: multiply;
-      pointer-events: none;
-      animation: noiseMove 0.1s infinite linear;
-    }
-
-    #backroomsVignette {
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(circle, transparent 35%, rgba(0,0,0,0.55) 100%);
+      animation: noiseMove 0.08s infinite linear;
       pointer-events: none;
     }
 
-    #flash {
+    @keyframes noiseMove {
+      from { transform: translateY(0px); }
+      to   { transform: translateY(6px); }
+    }
+
+    #vignette {
       position: absolute;
       inset: 0;
+      background: radial-gradient(circle, rgba(0,0,0,0) 35%, rgba(0,0,0,0.55) 100%);
+      pointer-events: none;
+    }
+
+    #levelText {
+      position: absolute;
+      top: 16px;
+      right: 18px;
       z-index: 40;
-      background: #fff8c4;
-      opacity: 0;
-      pointer-events: none;
-    }
-
-    #flash.active {
-      animation: flashAnim 0.45s ease-out;
-    }
-
-    #backroomsMessage {
-      position: absolute;
-      inset: 0;
-      z-index: 35;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      padding: 30px;
-      font-size: clamp(24px, 5vw, 54px);
-      font-weight: bold;
-      color: #2e2500;
-      text-shadow: 0 0 8px rgba(255,255,200,0.35);
-      letter-spacing: 2px;
+      font-size: clamp(18px, 2vw, 28px);
+      font-weight: 900;
+      color: #362c00;
+      text-shadow: 0 0 8px rgba(255,255,220,0.45);
+      background: rgba(255,255,200,0.18);
+      padding: 10px 14px;
+      border-radius: 14px;
     }
 
     #entity {
       position: absolute;
-      right: 12%;
-      bottom: 8%;
-      width: 120px;
+      right: 8%;
+      bottom: 16%;
+      width: 110px;
       height: 220px;
-      background: rgba(0,0,0,0.8);
-      filter: blur(1px);
+      background: rgba(0,0,0,0.82);
       border-radius: 50px 50px 20px 20px;
+      filter: blur(1px);
       opacity: 0;
-      transform: translateX(120px);
+      transform: translateX(140px);
     }
 
     #entity.show {
-      animation: entityPeek 1.4s ease-in-out;
+      animation: entityPeek 1.5s ease-in-out;
+    }
+
+    @keyframes entityPeek {
+      0%   { opacity: 0; transform: translateX(140px); }
+      30%  { opacity: 0.92; transform: translateX(0px); }
+      70%  { opacity: 0.92; transform: translateX(0px); }
+      100% { opacity: 0; transform: translateX(140px); }
     }
 
     .shake {
@@ -179,33 +336,6 @@
       80%  { transform: translate(6px, -1px); }
       100% { transform: translate(0px, 0px); }
     }
-
-    @keyframes flicker {
-      from { filter: brightness(1) contrast(1); }
-      to   { filter: brightness(1.08) contrast(1.07); }
-    }
-
-    @keyframes noiseMove {
-      from { transform: translateY(0px); }
-      to   { transform: translateY(6px); }
-    }
-
-    @keyframes flashAnim {
-      0%   { opacity: 0; }
-      20%  { opacity: 0.9; }
-      100% { opacity: 0; }
-    }
-
-    @keyframes entityPeek {
-      0%   { opacity: 0; transform: translateX(130px); }
-      30%  { opacity: 0.95; transform: translateX(0px); }
-      70%  { opacity: 0.95; transform: translateX(0px); }
-      100% { opacity: 0; transform: translateX(130px); }
-    }
-
-    .hidden {
-      display: none !important;
-    }
   </style>
 </head>
 <body>
@@ -213,49 +343,75 @@
     <video id="video" playsinline></video>
     <canvas id="canvas"></canvas>
 
-    <div id="overlayText">카메라 시작 중...</div>
+    <div id="yellowWarning">
+      <div id="yellowWarningText">WARNING<br>노란 필터 단계</div>
+    </div>
 
-    <div id="controls">
-      <button id="startBtn">카메라 시작</button>
-      <button id="resetBtn">백룸에서 복귀</button>
+    <div id="backroomsScene">
+      <div id="wall"></div>
+      <div class="pillar p1"></div>
+      <div class="pillar p2"></div>
+      <div class="pillar p3"></div>
+      <div id="floor"></div>
+
+      <div class="light l1"></div>
+      <div class="light l2"></div>
+      <div class="light l3"></div>
+
+      <div id="backroomsFog"></div>
+      <div id="noise"></div>
+      <div id="vignette"></div>
+      <div id="levelText">LEVEL 0</div>
+      <div id="entity"></div>
     </div>
 
     <div id="flash"></div>
 
-    <div id="backroomsLayer">
-      <div id="backroomsNoise"></div>
-      <div id="backroomsVignette"></div>
-      <div id="backroomsMessage">YOU CLIPPED INTO<br>THE BACKROOMS</div>
-      <div id="entity"></div>
+    <div id="ui">
+      <div id="status" class="panel">카메라 시작 전</div>
+      <div id="counter" class="panel">넘어짐 횟수: 0 / 단계: 정상</div>
+    </div>
+
+    <div id="controls">
+      <button id="startBtn">카메라 시작</button>
+      <button id="resetBtn">초기화</button>
+      <button id="clearFallBtn">넘어짐 횟수 0으로</button>
     </div>
   </div>
 
-  <!-- MediaPipe -->
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
 
   <script>
     const video = document.getElementById("video");
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
-    const overlayText = document.getElementById("overlayText");
+
+    const statusBox = document.getElementById("status");
+    const counterBox = document.getElementById("counter");
     const startBtn = document.getElementById("startBtn");
     const resetBtn = document.getElementById("resetBtn");
+    const clearFallBtn = document.getElementById("clearFallBtn");
+
+    const yellowWarning = document.getElementById("yellowWarning");
+    const backroomsScene = document.getElementById("backroomsScene");
     const flash = document.getElementById("flash");
-    const backroomsLayer = document.getElementById("backroomsLayer");
+    const levelText = document.getElementById("levelText");
     const entity = document.getElementById("entity");
     const app = document.getElementById("app");
 
-    let mpCamera = null;
     let pose = null;
+    let mpCamera = null;
     let started = false;
-    let inBackrooms = false;
 
     let fallScore = 0;
+    let fallCount = 0;
+    let inBackrooms = false;
+    let warningMode = false;
+
     let bodyAngleHistory = [];
     let torsoYHistory = [];
-    let lastTriggerTime = 0;
+    let lockout = false;
 
     function resizeCanvas() {
       canvas.width = video.videoWidth || window.innerWidth;
@@ -290,85 +446,22 @@
       const dy = b.y - a.y;
       const angleRad = Math.atan2(dy, dx);
       const angleDeg = Math.abs(angleRad * 180 / Math.PI);
-      const verticalDiff = Math.abs(90 - angleDeg);
-      return verticalDiff;
+      return Math.abs(90 - angleDeg);
     }
 
     function clamp(n, min, max) {
       return Math.max(min, Math.min(max, n));
     }
 
-    function drawStatus(text) {
-      overlayText.textContent = text;
+    function setStatus(text) {
+      statusBox.textContent = text;
     }
 
-    function triggerBackrooms(reasonText) {
-      if (inBackrooms) return;
-
-      const now = Date.now();
-      if (now - lastTriggerTime < 2500) return;
-      lastTriggerTime = now;
-
-      inBackrooms = true;
-      backroomsLayer.classList.add("active");
-      flash.classList.remove("active");
-      void flash.offsetWidth;
-      flash.classList.add("active");
-
-      app.classList.add("shake");
-      setTimeout(() => app.classList.remove("shake"), 800);
-
-      drawStatus("상태: 백룸 진입 감지\n" + reasonText);
-
-      if (Math.random() < 0.7) {
-        setTimeout(() => {
-          entity.classList.remove("show");
-          void entity.offsetWidth;
-          entity.classList.add("show");
-        }, 700);
-      }
-
-      playBackroomsHum();
-    }
-
-    function resetBackrooms() {
-      inBackrooms = false;
-      backroomsLayer.classList.remove("active");
-      entity.classList.remove("show");
-      drawStatus("상태: 감시 중");
-      fallScore = 0;
-      bodyAngleHistory = [];
-      torsoYHistory = [];
-    }
-
-    function playBackroomsHum() {
-      try {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        const audioCtx = new AudioContextClass();
-
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        const lowpass = audioCtx.createBiquadFilter();
-
-        osc.type = "sawtooth";
-        osc.frequency.setValueAtTime(58, audioCtx.currentTime);
-
-        lowpass.type = "lowpass";
-        lowpass.frequency.setValueAtTime(350, audioCtx.currentTime);
-
-        gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.04, audioCtx.currentTime + 0.08);
-        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1.2);
-
-        osc.connect(lowpass);
-        lowpass.connect(gain);
-        gain.connect(audioCtx.destination);
-
-        osc.start();
-        osc.stop(audioCtx.currentTime + 1.25);
-      } catch (e) {
-        console.log("오디오 재생 실패:", e);
-      }
+    function updateCounter() {
+      let stage = "정상";
+      if (fallCount === 1) stage = "노란 필터 단계";
+      if (fallCount >= 2) stage = "백룸 진입";
+      counterBox.textContent = "넘어짐 횟수: " + fallCount + " / 단계: " + stage;
     }
 
     function getLandmark(landmarks, index) {
@@ -381,6 +474,154 @@
       };
     }
 
+    function drawCircle(p, r, color) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+
+    function drawLine(a, b, color, width = 4) {
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.stroke();
+    }
+
+    function drawPose(ls, rs, lh, rh, nose, shoulderMid, hipMid) {
+      drawLine(ls, rs, "#00e5ff", 4);
+      drawLine(lh, rh, "#00e5ff", 4);
+      drawLine(shoulderMid, hipMid, "#ffeb3b", 6);
+
+      drawCircle(ls, 6, "#00e5ff");
+      drawCircle(rs, 6, "#00e5ff");
+      drawCircle(lh, 6, "#00e5ff");
+      drawCircle(rh, 6, "#00e5ff");
+      drawCircle(nose, 6, "#ff5252");
+      drawCircle(shoulderMid, 7, "#7cff6b");
+      drawCircle(hipMid, 7, "#7cff6b");
+    }
+
+    function playHum() {
+      try {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContextClass();
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        const filter = audioCtx.createBiquadFilter();
+
+        osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(58, audioCtx.currentTime);
+
+        filter.type = "lowpass";
+        filter.frequency.setValueAtTime(320, audioCtx.currentTime);
+
+        gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.05, audioCtx.currentTime + 0.06);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1.2);
+
+        osc.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start();
+        osc.stop(audioCtx.currentTime + 1.25);
+      } catch (e) {
+        console.log("오디오 실패", e);
+      }
+    }
+
+    function doFlash() {
+      flash.classList.remove("active");
+      void flash.offsetWidth;
+      flash.classList.add("active");
+    }
+
+    function doShake() {
+      app.classList.add("shake");
+      setTimeout(() => app.classList.remove("shake"), 750);
+    }
+
+    function showEntitySometimes() {
+      if (Math.random() < 0.7) {
+        setTimeout(() => {
+          entity.classList.remove("show");
+          void entity.offsetWidth;
+          entity.classList.add("show");
+        }, 700);
+      }
+    }
+
+    function enterWarningStage() {
+      warningMode = true;
+      yellowWarning.classList.add("active");
+      setStatus("상태: 1차 넘어짐 감지\n노란 필터 단계 진입");
+      doFlash();
+      doShake();
+      playHum();
+    }
+
+    function enterBackrooms() {
+      inBackrooms = true;
+      warningMode = false;
+      yellowWarning.classList.remove("active");
+      backroomsScene.classList.add("active");
+      levelText.textContent = "LEVEL 0";
+      setStatus("상태: 2차 넘어짐 감지\n백룸 진입");
+      doFlash();
+      doShake();
+      playHum();
+      showEntitySometimes();
+    }
+
+    function registerFall() {
+      if (lockout) return;
+
+      fallCount += 1;
+      updateCounter();
+
+      if (fallCount === 1) {
+        enterWarningStage();
+      } else if (fallCount >= 2) {
+        enterBackrooms();
+      }
+
+      lockout = true;
+      setTimeout(() => {
+        lockout = false;
+        fallScore = 0;
+      }, 2200);
+    }
+
+    function resetAll() {
+      fallScore = 0;
+      fallCount = 0;
+      inBackrooms = false;
+      warningMode = false;
+      lockout = false;
+      bodyAngleHistory = [];
+      torsoYHistory = [];
+      yellowWarning.classList.remove("active");
+      backroomsScene.classList.remove("active");
+      entity.classList.remove("show");
+      setStatus("상태: 초기화됨");
+      updateCounter();
+    }
+
+    function clearFallCount() {
+      fallCount = 0;
+      inBackrooms = false;
+      warningMode = false;
+      yellowWarning.classList.remove("active");
+      backroomsScene.classList.remove("active");
+      entity.classList.remove("show");
+      updateCounter();
+      setStatus("상태: 넘어짐 횟수만 0으로 초기화");
+    }
+
     function analyzePose(landmarks) {
       const leftShoulder = getLandmark(landmarks, 11);
       const rightShoulder = getLandmark(landmarks, 12);
@@ -389,7 +630,7 @@
       const nose = getLandmark(landmarks, 0);
 
       if (!leftShoulder || !rightShoulder || !leftHip || !rightHip || !nose) {
-        drawStatus("상태: 포인트 부족");
+        setStatus("상태: 포인트 부족");
         return;
       }
 
@@ -411,79 +652,38 @@
       const lyingLikely = avgAngle > 50 || ratio > 1.2;
       const droppedDown = torsoCenterY - avgTorsoY > canvas.height * 0.04;
 
-      if (lyingLikely) {
-        fallScore += 1.2;
-      } else {
-        fallScore -= 0.7;
-      }
+      if (lyingLikely) fallScore += 1.2;
+      else fallScore -= 0.7;
 
-      if (droppedDown) {
-        fallScore += 1.0;
-      }
+      if (droppedDown) fallScore += 1.0;
 
       fallScore = clamp(fallScore, 0, 12);
 
-      let status = [
-        "상태: 감시 중",
-        "기울기: " + avgAngle.toFixed(1) + "°",
-        "가로/세로 비율: " + ratio.toFixed(2),
-        "낙상 점수: " + fallScore.toFixed(1)
-      ].join("\n");
+      let statusText =
+        "상태: 감시 중\n" +
+        "기울기: " + avgAngle.toFixed(1) + "°\n" +
+        "가로/세로 비율: " + ratio.toFixed(2) + "\n" +
+        "낙상 점수: " + fallScore.toFixed(1);
 
-      if (lyingLikely) {
-        status += "\n판정: 눕거나 심하게 기울어짐";
+      if (warningMode && !inBackrooms) {
+        statusText += "\n1차 단계 활성화";
+      }
+      if (inBackrooms) {
+        statusText += "\n백룸 화면 활성화";
       }
 
-      drawStatus(status);
+      setStatus(statusText);
 
-      if (!inBackrooms && fallScore >= 6) {
-        triggerBackrooms(
-          "이유: 몸이 크게 기울었거나\n옆으로 누운 자세로 감지됨"
-        );
+      if (fallScore >= 6 && !lockout) {
+        registerFall();
       }
 
       drawPose(leftShoulder, rightShoulder, leftHip, rightHip, nose, shoulderMid, hipMid);
     }
 
-    function drawCircle(p, r, color) {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-    }
-
-    function drawLine(a, b, color, width = 4) {
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.stroke();
-    }
-
-    function drawPose(ls, rs, lh, rh, nose, shoulderMid, hipMid) {
-      ctx.save();
-
-      drawLine(ls, rs, "#00e5ff", 4);
-      drawLine(lh, rh, "#00e5ff", 4);
-      drawLine(shoulderMid, hipMid, "#ffeb3b", 6);
-
-      drawCircle(ls, 6, "#00e5ff");
-      drawCircle(rs, 6, "#00e5ff");
-      drawCircle(lh, 6, "#00e5ff");
-      drawCircle(rh, 6, "#00e5ff");
-      drawCircle(nose, 6, "#ff5252");
-      drawCircle(shoulderMid, 7, "#7cff6b");
-      drawCircle(hipMid, 7, "#7cff6b");
-
-      ctx.restore();
-    }
-
     async function initPose() {
       pose = new Pose({
-        locateFile: (file) => {
-          return `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`;
-        }
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
       });
 
       pose.setOptions({
@@ -497,15 +697,12 @@
       pose.onResults((results) => {
         resizeCanvas();
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-        ctx.save();
         ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-        ctx.restore();
 
         if (results.poseLandmarks) {
           analyzePose(results.poseLandmarks);
         } else {
-          drawStatus("상태: 사람을 찾는 중...");
+          setStatus("상태: 사람을 찾는 중...");
           fallScore = Math.max(0, fallScore - 0.5);
         }
       });
@@ -528,20 +725,19 @@
 
         await mpCamera.start();
         started = true;
-        drawStatus("상태: 감시 중");
+        updateCounter();
+        setStatus("상태: 감시 시작");
       } catch (err) {
         console.error(err);
-        drawStatus("카메라 시작 실패\n브라우저 권한 또는 https 환경을 확인해줘");
+        setStatus("카메라 시작 실패\n브라우저 권한 또는 https 환경 확인");
       }
     }
 
-    startBtn.addEventListener("click", async () => {
-      await startCamera();
-    });
+    startBtn.addEventListener("click", startCamera);
+    resetBtn.addEventListener("click", resetAll);
+    clearFallBtn.addEventListener("click", clearFallCount);
 
-    resetBtn.addEventListener("click", () => {
-      resetBackrooms();
-    });
+    updateCounter();
   </script>
 </body>
 </html>
