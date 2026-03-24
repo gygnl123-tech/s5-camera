@@ -1,608 +1,257 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>진짜 이미지 백룸 카메라</title>
-  <style>
-    * { box-sizing: border-box; }
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #000;
-      font-family: Arial, sans-serif;
-      color: white;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>백룸 카메라 최종판</title>
 
-    #app {
-      position: relative;
-      width: 100vw;
-      height: 100vh;
-      overflow: hidden;
-      background: #000;
-    }
+<style>
+body {
+  margin: 0;
+  background: black;
+  overflow: hidden;
+  font-family: Arial;
+}
 
-    video, canvas {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
+video, canvas {
+  position: absolute;
+  width: 100vw;
+  height: 100vh;
+  object-fit: cover;
+}
 
-    #ui {
-      position: absolute;
-      top: 12px;
-      left: 12px;
-      z-index: 50;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      max-width: min(92vw, 420px);
-    }
+#ui {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 50;
+  color: white;
+  background: rgba(0,0,0,0.5);
+  padding: 10px;
+  border-radius: 10px;
+}
 
-    .panel {
-      background: rgba(0,0,0,0.45);
-      border-radius: 14px;
-      padding: 10px 14px;
-      line-height: 1.45;
-      white-space: pre-line;
-      backdrop-filter: blur(4px);
-      font-size: 14px;
-    }
+#controls {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+}
 
-    #controls {
-      position: absolute;
-      bottom: 18px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 60;
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
+button, input {
+  padding: 10px;
+  margin: 5px;
+  border-radius: 10px;
+  border: none;
+}
 
-    button {
-      border: none;
-      border-radius: 999px;
-      padding: 12px 18px;
-      font-size: 15px;
-      font-weight: bold;
-      cursor: pointer;
-      background: rgba(255,255,255,0.94);
-      color: #111;
-    }
+/* 노란 경고 */
+#yellow {
+  position: absolute;
+  inset: 0;
+  background: rgba(255, 220, 0, 0.3);
+  opacity: 0;
+  z-index: 20;
+  transition: 0.3s;
+}
 
-    #yellowWarning {
-      position: absolute;
-      inset: 0;
-      z-index: 25;
-      pointer-events: none;
-      opacity: 0;
-      background:
-        linear-gradient(rgba(255, 230, 80, 0.22), rgba(180, 145, 0, 0.18)),
-        radial-gradient(circle at center, rgba(255,255,190,0.18), rgba(90,70,0,0.28));
-      transition: opacity 0.35s ease;
-    }
+/* 백룸 */
+#backrooms {
+  position: absolute;
+  inset: 0;
+  display: none;
+  z-index: 30;
+}
 
-    #yellowWarning.active {
-      opacity: 1;
-      animation: yellowPulse 1s infinite alternate;
-    }
+#backrooms img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 
-    #yellowWarningText {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: clamp(24px, 4vw, 46px);
-      font-weight: 900;
-      color: #fff7b8;
-      text-shadow: 0 0 12px rgba(0,0,0,0.55);
-      letter-spacing: 2px;
-      text-align: center;
-    }
+/* 엔티티 */
+#entity {
+  position: absolute;
+  right: 10%;
+  bottom: 10%;
+  width: 120px;
+  opacity: 0;
+}
 
-    @keyframes yellowPulse {
-      from { filter: brightness(1) saturate(1); }
-      to   { filter: brightness(1.1) saturate(1.2); }
-    }
+.show {
+  animation: entity 1.5s;
+}
 
-    #flash {
-      position: absolute;
-      inset: 0;
-      z-index: 70;
-      background: #fff6bf;
-      opacity: 0;
-      pointer-events: none;
-    }
+@keyframes entity {
+  0% {opacity:0; transform:translateX(100px);}
+  50% {opacity:1; transform:translateX(0);}
+  100% {opacity:0; transform:translateX(100px);}
+}
 
-    #flash.active {
-      animation: flashAnim 0.45s ease-out;
-    }
+/* 흔들림 */
+.shake {
+  animation: shake 0.4s;
+}
 
-    @keyframes flashAnim {
-      0%   { opacity: 0; }
-      25%  { opacity: 0.95; }
-      100% { opacity: 0; }
-    }
-
-    #backroomsScene {
-      position: absolute;
-      inset: 0;
-      z-index: 30;
-      display: none;
-      overflow: hidden;
-      background: #000;
-    }
-
-    #backroomsScene.active {
-      display: block;
-    }
-
-    #backroomsImage {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      filter: contrast(1.05) saturate(1.05) brightness(0.95);
-    }
-
-    #backroomsOverlay {
-      position: absolute;
-      inset: 0;
-      background:
-        radial-gradient(circle, rgba(0,0,0,0) 35%, rgba(0,0,0,0.58) 100%),
-        repeating-linear-gradient(
-          90deg,
-          rgba(0,0,0,0.02) 0px,
-          rgba(0,0,0,0.02) 1px,
-          rgba(255,255,255,0.01) 1px,
-          rgba(255,255,255,0.01) 2px
-        );
-      pointer-events: none;
-      animation: noiseMove 0.08s infinite linear;
-    }
-
-    @keyframes noiseMove {
-      from { transform: translateY(0px); }
-      to   { transform: translateY(6px); }
-    }
-
-    #levelText {
-      position: absolute;
-      top: 16px;
-      right: 18px;
-      z-index: 40;
-      font-size: clamp(18px, 2vw, 28px);
-      font-weight: 900;
-      color: #fff5b0;
-      text-shadow: 0 0 8px rgba(0,0,0,0.7);
-      background: rgba(0,0,0,0.25);
-      padding: 10px 14px;
-      border-radius: 14px;
-    }
-
-    #entity {
-      position: absolute;
-      right: 8%;
-      bottom: 12%;
-      width: 130px;
-      max-width: 20vw;
-      opacity: 0;
-      transform: translateX(140px);
-      filter: brightness(0.2) contrast(1.4);
-    }
-
-    #entity.show {
-      animation: entityPeek 1.5s ease-in-out;
-    }
-
-    @keyframes entityPeek {
-      0%   { opacity: 0; transform: translateX(140px); }
-      30%  { opacity: 0.92; transform: translateX(0px); }
-      70%  { opacity: 0.92; transform: translateX(0px); }
-      100% { opacity: 0; transform: translateX(140px); }
-    }
-
-    .shake {
-      animation: shake 0.35s linear 2;
-    }
-
-    @keyframes shake {
-      0%   { transform: translate(0px, 0px); }
-      20%  { transform: translate(-8px, 2px); }
-      40%  { transform: translate(7px, -2px); }
-      60%  { transform: translate(-6px, 3px); }
-      80%  { transform: translate(6px, -1px); }
-      100% { transform: translate(0px, 0px); }
-    }
-  </style>
+@keyframes shake {
+  0% {transform:translate(0);}
+  25% {transform:translate(-10px);}
+  50% {transform:translate(10px);}
+  75% {transform:translate(-10px);}
+  100% {transform:translate(0);}
+}
+</style>
 </head>
+
 <body>
-  <div id="app">
-    <video id="video" playsinline></video>
-    <canvas id="canvas"></canvas>
 
-    <div id="yellowWarning">
-      <div id="yellowWarningText">WARNING<br>노란 필터 단계</div>
-    </div>
+<video id="video" autoplay playsinline></video>
+<canvas id="canvas"></canvas>
 
-    <div id="backroomsScene">
-      <img id="backroomsImage" src="https://photos.google.com/search/CgAiCBIGCgRyAgoAKJXWjfPRMw%3D%3D/photo/AF1QipN949Mu9vl78Pv90qbVMshsFIgb3qhQnqJqJJNi?hl=ko" alt="백룸 배경">
-      <img id="entity" src="entity.png" alt="엔티티">
-      <div id="backroomsOverlay"></div>
-      <div id="levelText">LEVEL 0</div>
-    </div>
+<div id="yellow"></div>
 
-    <div id="flash"></div>
+<div id="backrooms">
+  <img id="bg">
+  <img id="entity" src="">
+</div>
 
-    <div id="ui">
-      <div id="status" class="panel">카메라 시작 전</div>
-      <div id="counter" class="panel">넘어짐 횟수: 0 / 단계: 정상</div>
-    </div>
+<div id="ui">
+상태: 대기중<br>
+넘어짐: <span id="count">0</span>
+</div>
 
-    <div id="controls">
-      <button id="startBtn">카메라 시작</button>
-      <button id="resetBtn">초기화</button>
-      <button id="clearFallBtn">넘어짐 횟수 0으로</button>
-    </div>
-  </div>
+<div id="controls">
+<button onclick="start()">카메라 시작</button>
+<button onclick="reset()">초기화</button>
+<input type="file" id="picker" accept="image/*">
+</div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
 
-  <script>
-    const video = document.getElementById("video");
-    const canvas = document.getElementById("canvas");
-    const ctx = canvas.getContext("2d");
+<script>
+const video = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
 
-    const statusBox = document.getElementById("status");
-    const counterBox = document.getElementById("counter");
-    const startBtn = document.getElementById("startBtn");
-    const resetBtn = document.getElementById("resetBtn");
-    const clearFallBtn = document.getElementById("clearFallBtn");
+const yellow = document.getElementById("yellow");
+const backrooms = document.getElementById("backrooms");
+const bg = document.getElementById("bg");
+const entity = document.getElementById("entity");
 
-    const yellowWarning = document.getElementById("yellowWarning");
-    const backroomsScene = document.getElementById("backroomsScene");
-    const flash = document.getElementById("flash");
-    const entity = document.getElementById("entity");
-    const app = document.getElementById("app");
+const countText = document.getElementById("count");
+const picker = document.getElementById("picker");
 
-    let pose = null;
-    let mpCamera = null;
-    let started = false;
+let fallScore = 0;
+let fallCount = 0;
+let lock = false;
 
-    let fallScore = 0;
-    let fallCount = 0;
-    let inBackrooms = false;
-    let warningMode = false;
+/* 📸 이미지 선택 */
+picker.addEventListener("change", e=>{
+  const file = e.target.files[0];
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    bg.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
 
-    let bodyAngleHistory = [];
-    let torsoYHistory = [];
-    let lockout = false;
+/* 🎥 카메라 */
+async function start() {
+  const pose = new Pose({
+    locateFile: file => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+  });
 
-    function resizeCanvas() {
-      canvas.width = video.videoWidth || window.innerWidth;
-      canvas.height = video.videoHeight || window.innerHeight;
+  pose.setOptions({
+    modelComplexity: 1,
+    minDetectionConfidence: 0.5,
+    minTrackingConfidence: 0.5
+  });
+
+  pose.onResults(res=>{
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(res.image,0,0,canvas.width,canvas.height);
+
+    if(res.poseLandmarks){
+      detect(res.poseLandmarks);
     }
+  });
 
-    window.addEventListener("resize", resizeCanvas);
+  const cam = new Camera(video,{
+    onFrame: async ()=>{
+      await pose.send({image: video});
+    },
+    width:640,
+    height:480
+  });
 
-    function average(arr) {
-      if (!arr.length) return 0;
-      return arr.reduce((a, b) => a + b, 0) / arr.length;
+  cam.start();
+}
+
+/* 🤖 넘어짐 감지 */
+function detect(lm){
+  const s1 = lm[11];
+  const s2 = lm[12];
+  const h1 = lm[23];
+  const h2 = lm[24];
+
+  const dy = Math.abs((s1.y+s2.y)/2 - (h1.y+h2.y)/2);
+  const dx = Math.abs((s1.x+s2.x)/2 - (h1.x+h2.x)/2);
+
+  if(dx > dy){
+    fallScore += 1;
+  } else {
+    fallScore -= 0.5;
+  }
+
+  fallScore = Math.max(0, Math.min(10, fallScore));
+
+  if(fallScore > 6 && !lock){
+    fall();
+  }
+}
+
+/* 💥 넘어짐 이벤트 */
+function fall(){
+  lock = true;
+  fallCount++;
+  countText.textContent = fallCount;
+
+  document.body.classList.add("shake");
+  setTimeout(()=>document.body.classList.remove("shake"),400);
+
+  if(fallCount == 1){
+    yellow.style.opacity = 1;
+  }
+  else if(fallCount >= 2){
+    yellow.style.opacity = 0;
+    backrooms.style.display = "block";
+
+    if(Math.random() < 0.7){
+      entity.classList.add("show");
+      setTimeout(()=>entity.classList.remove("show"),1500);
     }
+  }
 
-    function pushLimited(arr, value, limit) {
-      arr.push(value);
-      if (arr.length > limit) arr.shift();
-    }
+  setTimeout(()=>{
+    lock = false;
+    fallScore = 0;
+  },2000);
+}
 
-    function distance(a, b) {
-      return Math.hypot(a.x - b.x, a.y - b.y);
-    }
+/* 🔄 초기화 */
+function reset(){
+  fallCount = 0;
+  fallScore = 0;
+  lock = false;
+  yellow.style.opacity = 0;
+  backrooms.style.display = "none";
+  countText.textContent = 0;
+}
+</script>
 
-    function midpoint(a, b) {
-      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    }
-
-    function angleFromVerticalDeg(a, b) {
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const angleRad = Math.atan2(dy, dx);
-      const angleDeg = Math.abs(angleRad * 180 / Math.PI);
-      return Math.abs(90 - angleDeg);
-    }
-
-    function clamp(n, min, max) {
-      return Math.max(min, Math.min(max, n));
-    }
-
-    function setStatus(text) {
-      statusBox.textContent = text;
-    }
-
-    function updateCounter() {
-      let stage = "정상";
-      if (fallCount === 1) stage = "노란 필터 단계";
-      if (fallCount >= 2) stage = "백룸 진입";
-      counterBox.textContent = "넘어짐 횟수: " + fallCount + " / 단계: " + stage;
-    }
-
-    function getLandmark(landmarks, index) {
-      const p = landmarks[index];
-      if (!p) return null;
-      return {
-        x: p.x * canvas.width,
-        y: p.y * canvas.height,
-        visibility: p.visibility ?? 1
-      };
-    }
-
-    function drawCircle(p, r, color) {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
-    }
-
-    function drawLine(a, b, color, width = 4) {
-      ctx.beginPath();
-      ctx.moveTo(a.x, a.y);
-      ctx.lineTo(b.x, b.y);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = width;
-      ctx.stroke();
-    }
-
-    function drawPose(ls, rs, lh, rh, nose, shoulderMid, hipMid) {
-      drawLine(ls, rs, "#00e5ff", 4);
-      drawLine(lh, rh, "#00e5ff", 4);
-      drawLine(shoulderMid, hipMid, "#ffeb3b", 6);
-
-      drawCircle(ls, 6, "#00e5ff");
-      drawCircle(rs, 6, "#00e5ff");
-      drawCircle(lh, 6, "#00e5ff");
-      drawCircle(rh, 6, "#00e5ff");
-      drawCircle(nose, 6, "#ff5252");
-      drawCircle(shoulderMid, 7, "#7cff6b");
-      drawCircle(hipMid, 7, "#7cff6b");
-    }
-
-    function playHum() {
-      try {
-        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        const audioCtx = new AudioContextClass();
-
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        const filter = audioCtx.createBiquadFilter();
-
-        osc.type = "sawtooth";
-        osc.frequency.setValueAtTime(58, audioCtx.currentTime);
-        filter.type = "lowpass";
-        filter.frequency.setValueAtTime(320, audioCtx.currentTime);
-
-        gain.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.05, audioCtx.currentTime + 0.06);
-        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 1.2);
-
-        osc.connect(filter);
-        filter.connect(gain);
-        gain.connect(audioCtx.destination);
-
-        osc.start();
-        osc.stop(audioCtx.currentTime + 1.25);
-      } catch (e) {
-        console.log("오디오 실패", e);
-      }
-    }
-
-    function doFlash() {
-      flash.classList.remove("active");
-      void flash.offsetWidth;
-      flash.classList.add("active");
-    }
-
-    function doShake() {
-      app.classList.add("shake");
-      setTimeout(() => app.classList.remove("shake"), 750);
-    }
-
-    function showEntitySometimes() {
-      if (Math.random() < 0.7) {
-        setTimeout(() => {
-          entity.classList.remove("show");
-          void entity.offsetWidth;
-          entity.classList.add("show");
-        }, 700);
-      }
-    }
-
-    function enterWarningStage() {
-      warningMode = true;
-      yellowWarning.classList.add("active");
-      setStatus("상태: 1차 넘어짐 감지\n노란 필터 단계 진입");
-      doFlash();
-      doShake();
-      playHum();
-    }
-
-    function enterBackrooms() {
-      inBackrooms = true;
-      warningMode = false;
-      yellowWarning.classList.remove("active");
-      backroomsScene.classList.add("active");
-      setStatus("상태: 2차 넘어짐 감지\n백룸 진입");
-      doFlash();
-      doShake();
-      playHum();
-      showEntitySometimes();
-    }
-
-    function registerFall() {
-      if (lockout) return;
-
-      fallCount += 1;
-      updateCounter();
-
-      if (fallCount === 1) {
-        enterWarningStage();
-      } else if (fallCount >= 2) {
-        enterBackrooms();
-      }
-
-      lockout = true;
-      setTimeout(() => {
-        lockout = false;
-        fallScore = 0;
-      }, 2200);
-    }
-
-    function resetAll() {
-      fallScore = 0;
-      fallCount = 0;
-      inBackrooms = false;
-      warningMode = false;
-      lockout = false;
-      bodyAngleHistory = [];
-      torsoYHistory = [];
-      yellowWarning.classList.remove("active");
-      backroomsScene.classList.remove("active");
-      entity.classList.remove("show");
-      setStatus("상태: 초기화됨");
-      updateCounter();
-    }
-
-    function clearFallCount() {
-      fallCount = 0;
-      inBackrooms = false;
-      warningMode = false;
-      yellowWarning.classList.remove("active");
-      backroomsScene.classList.remove("active");
-      entity.classList.remove("show");
-      updateCounter();
-      setStatus("상태: 넘어짐 횟수만 0으로 초기화");
-    }
-
-    function analyzePose(landmarks) {
-      const leftShoulder = getLandmark(landmarks, 11);
-      const rightShoulder = getLandmark(landmarks, 12);
-      const leftHip = getLandmark(landmarks, 23);
-      const rightHip = getLandmark(landmarks, 24);
-      const nose = getLandmark(landmarks, 0);
-
-      if (!leftShoulder || !rightShoulder || !leftHip || !rightHip || !nose) {
-        setStatus("상태: 포인트 부족");
-        return;
-      }
-
-      const shoulderMid = midpoint(leftShoulder, rightShoulder);
-      const hipMid = midpoint(leftHip, rightHip);
-
-      const torsoLength = distance(shoulderMid, hipMid);
-      const shoulderWidth = distance(leftShoulder, rightShoulder);
-      const bodyAngle = angleFromVerticalDeg(shoulderMid, hipMid);
-      const torsoCenterY = (shoulderMid.y + hipMid.y) / 2;
-
-      pushLimited(bodyAngleHistory, bodyAngle, 8);
-      pushLimited(torsoYHistory, torsoCenterY, 8);
-
-      const avgAngle = average(bodyAngleHistory);
-      const avgTorsoY = average(torsoYHistory);
-      const ratio = shoulderWidth / Math.max(torsoLength, 1);
-
-      const lyingLikely = avgAngle > 50 || ratio > 1.2;
-      const droppedDown = torsoCenterY - avgTorsoY > canvas.height * 0.04;
-
-      if (lyingLikely) fallScore += 1.2;
-      else fallScore -= 0.7;
-
-      if (droppedDown) fallScore += 1.0;
-
-      fallScore = clamp(fallScore, 0, 12);
-
-      let statusText =
-        "상태: 감시 중\n" +
-        "기울기: " + avgAngle.toFixed(1) + "°\n" +
-        "가로/세로 비율: " + ratio.toFixed(2) + "\n" +
-        "낙상 점수: " + fallScore.toFixed(1);
-
-      if (warningMode && !inBackrooms) statusText += "\n1차 단계 활성화";
-      if (inBackrooms) statusText += "\n백룸 화면 활성화";
-
-      setStatus(statusText);
-
-      if (fallScore >= 6 && !lockout) {
-        registerFall();
-      }
-
-      drawPose(leftShoulder, rightShoulder, leftHip, rightHip, nose, shoulderMid, hipMid);
-    }
-
-    async function initPose() {
-      pose = new Pose({
-        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
-      });
-
-      pose.setOptions({
-        modelComplexity: 1,
-        smoothLandmarks: true,
-        enableSegmentation: false,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.5
-      });
-
-      pose.onResults((results) => {
-        resizeCanvas();
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(results.image, 0, 0, canvas.width, canvas.height);
-
-        if (results.poseLandmarks) {
-          analyzePose(results.poseLandmarks);
-        } else {
-          setStatus("상태: 사람을 찾는 중...");
-          fallScore = Math.max(0, fallScore - 0.5);
-        }
-      });
-    }
-
-    async function startCamera() {
-      if (started) return;
-
-      try {
-        await initPose();
-
-        mpCamera = new Camera(video, {
-          onFrame: async () => {
-            if (!pose) return;
-            await pose.send({ image: video });
-          },
-          width: 960,
-          height: 720
-        });
-
-        await mpCamera.start();
-        started = true;
-        updateCounter();
-        setStatus("상태: 감시 시작");
-      } catch (err) {
-        console.error(err);
-        setStatus("카메라 시작 실패\n브라우저 권한 또는 https 환경 확인");
-      }
-    }
-
-    startBtn.addEventListener("click", startCamera);
-    resetBtn.addEventListener("click", resetAll);
-    clearFallBtn.addEventListener("click", clearFallCount);
-
-    updateCounter();
-  </script>
 </body>
 </html>
